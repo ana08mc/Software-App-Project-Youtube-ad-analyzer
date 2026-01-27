@@ -1,81 +1,133 @@
 # YouTube Ad Analyzer – Marketing Insights Pro
 
-This Streamlit application analyzes YouTube video data to extract marketing insights such as engagement rates, audience sentiment, and channel performance. 
-The app utilizes the YouTube Data API and Natural Language Processing for sentiment analysis of video comments.
+**M2 Software Project 2025-2026 – Aix-Marseille Université**
 
-## Features
-- Connects to YouTube Data API to retrieve video data such as views, likes, and comments.
-- Sentiment analysis on comments using VADER Sentiment Analysis.
-- Interactive visualizations like word clouds, sentiment trends, and engagement rate charts.
-- Automatically saves results to Google Sheets for long-term tracking and analysis.
-- Advanced thumbnail analysis using Tesseract OCR for text recognition and OpenCV for face detection.
+This Streamlit web application analyzes YouTube videos from a marketing and advertising perspective, combining:
 
-##  Requirements
-All dependencies are listed in the `requirements.txt` file.
+- YouTube Data API
+- Natural Language Processing (sentiment analysis, topic modeling)
+- Computer Vision (OCR, face detection, color & brightness analysis)
+- Google Sheets as persistent storage
+- A professional modular Python architecture
 
-To install the necessary packages, run:
+---
+
+##  Team
+
+- **Ana Maria MARTINEZ CASTRO**
+- **Vanessa MARTINEZ HERRERA**
+
+---
+
+##  What the Application Does
+
+This tool allows you to:
+
+- Analyze video performance (views, likes, engagement rate)
+- Evaluate advertising optimization (duration, title, CTA presence)
+- Analyze audience sentiment and discussion topics (VADER + LDA)
+- Analyze thumbnails using OCR, face detection, and color metrics
+- Compare two videos side by side
+- Automatically store analysis results in Google Sheets
+- Visualize historical performance of a channel
+
+---
+
+## Project Architecture
+
+The project has been refactored into a clean, professional modular structure:
+
+```
+src/
+ ├── api/
+ │    └── youtube_api.py        # Communication with YouTube API
+ ├── analysis/
+ │    ├── video_analysis.py     # Marketing logic, NLP, analytics
+ │    ├── viz.py                # Visualizations
+ │    └── thumbnail.py          # OCR and image analysis
+ ├── storage/
+ │    └── sheets.py             # Google Sheets integration
+ ├── utils/
+ │    └── helpers.py            # Utility helper functions
+ └── app/
+      └── streamlit_app.py     # Streamlit UI (interface only)
+```
+
+---
+
+##  Secrets Configuration
+
+The app requires two completely separate credentials:
+
+| Service | Variable | Purpose |
+|---|---|---|
+| YouTube Data API | `YT_API_KEY` | Retrieve video and channel data |
+| Google Sheets | `GOOGLE_CREDENTIALS_JSON` | Store and load analysis results |
+
+### A) YouTube API Key
+
+1. Go to Google Cloud Console → Enable **YouTube Data API v3**
+2. Create Credentials → API Key
+3. Store it as:
+
+```
+YT_API_KEY="AIza..."
+```
+
+---
+
+### B) Google Sheets Service Account
+
+1. Enable Google Sheets API and Google Drive API
+2. Create a Service Account
+3. Download the JSON credentials file
+4. Share your Google Sheet with the service account email
+5. Store the JSON as:
+
+```
+GOOGLE_CREDENTIALS_JSON='''{ ... }'''
+```
+
+---
+
+##  Run Locally
+
+From the project root:
+
+```bash
 pip install -r requirements.txt
+streamlit run src/app/streamlit_app.py
+```
 
-## Google Sheets and YouTube API Setup
+The app will be available at:  
+http://localhost:8501
 
-A) Google Sheets (Service Account)
-  1. Create a Google Cloud Project:
-      - Go to Google Cloud Console, create a new project, or select an existing one.
-  2. Enable the APIs:
-      - Enable Google Sheets API and Google Drive API in your Google Cloud Console project.
-  3. Create a Service Account:
-      - Go to IAM & Admin → Service Accounts and create a new service account.
-      - Download the JSON credentials file for the service account.
-  4.Grant access to your Google Sheet:
-      - Open the Google Sheets document and share it with the service account's email (you'll find this email in the JSON file you downloaded).
-  5. Store the credentials securely:
-      - For Hugging Face users: Go to Settings → Secrets and add a new secret.
-      - Name it GOOGLE_CREDENTIALS_JSON and paste the JSON content.
-        - For local setup:
-          - In Windows (PowerShell), run:
-            powershell
-            setx GOOGLE_CREDENTIALS_JSON "<PASTE_YOUR_JSON_HERE>"
-          - In Mac/Linux (Terminal), run:
-            export GOOGLE_CREDENTIALS_JSON="<PASTE_YOUR_JSON_HERE>"
+---
 
-B) YouTube Data API Key
-  1. Create the API Key:
-      - Go to Google Cloud Console, select your project, and enable the YouTube Data API v3.
-      - Create an API Key under APIs & Services → Credentials.
-  3. Store the API Key securely:
-      - For Hugging Face users: Go to Settings → Secrets and add a new secret.
-     - Name it YT_API_KEY and paste your API key.
-        - For local setup:
-          - In Windows (PowerShell), run:
-            powershell
-            setx YT_API_KEY "<YOUR_YOUTUBE_API_KEY>"
-          - In Mac/Linux (Terminal), run:
-            export YT_API_KEY="<YOUR_YOUTUBE_API_KEY>"
+##  Run with Docker
 
-## Running Locally
-To run the application locally, use the following command:
-streamlit run streamlit_app.py
+```bash
+docker build -t youtube-ad-analyzer .
+docker run -p 8501:8501 youtube-ad-analyzer
+```
 
-## Docker Setup
-You can also run this application using Docker. This is a great way to set up the app in an isolated environment.
-1. Build the Docker image:
-   -  In the root directory of the project (where your Dockerfile is located), build the Docker image by running the following command:
-       docker build -t youtube-ad-analyzer .
+---
 
-2. Run the Docker container:
-   -  After building the image, run the container with the following command:
-       docker run -p 8501:8501 youtube-ad-analyzer
+##  Dependencies
 
-This will start the application, and you can access it in your web browser by navigating to http://localhost:8501.
+All required Python packages are listed in `requirements.txt`.
 
-## Project Structure
-  - streamlit_app.py -> Main Streamlit app
-  - requirements.txt -> Python dependencies
-  - Dockerfile -> Docker configuration file
-  - .gitignore       -> Git ignore file (to avoid uploading sensitive data)
-  - .env.example     -> Example environment variable configuration
+---
 
-Use environment variables (or Secrets in Hugging Face) to keep your credentials secure.
+##  Academic Information
+
+**Course:** M2 Software Project 2025-2026  
+**University:** Aix-Marseille Université  
+**Professor:** Virgile Pesce
+
+---
 
 ## License
-This project is licensed under the MIT License.
+
+MIT License
+
