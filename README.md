@@ -2,7 +2,7 @@
 
 **M2 Software Project 2025–2026 – Aix-Marseille Université**
 
-This Streamlit web application analyzes YouTube videos from a **marketing and advertising perspective**, combining:
+This Streamlit web application analyzes YouTube videos from a marketing and advertising perspective, combining:
 
 - YouTube Data API
 - Natural Language Processing (sentiment analysis, topic modeling)
@@ -62,7 +62,7 @@ This separation ensures:
 
 ## Secrets Configuration
 
-The app requires **two separate credentials**:
+The app requires two separate credentials:
 
 | Service | Variable | Purpose |
 |---|---|---|
@@ -84,7 +84,7 @@ and fill in your own credentials.
 ### A) YouTube API Key
 
 1. Go to Google Cloud Console
-2. Enable **YouTube Data API v3**
+2. Enable YouTube Data API v3
 3. Create Credentials → API Key
 4. Add to `.env`:
 
@@ -96,7 +96,7 @@ YT_API_KEY=YOUR_YOUTUBE_API_KEY
 
 ### B) Google Sheets Service Account
 
-1. Enable **Google Sheets API** and **Google Drive API**
+1. Enable Google Sheets API and Google Drive API
 2. Create a Service Account
 3. Download the JSON credentials file
 4. Share your Google Sheet with the service account email
