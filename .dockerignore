@@ -1,0 +1,15 @@
+.env
+.streamlit/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+.vscode/
+.idea/
+.ipynb_checkpoints/
+*.log
+google_sheet.json
+*.json
+data/
