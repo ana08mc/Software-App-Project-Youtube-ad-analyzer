@@ -4,10 +4,14 @@ import streamlit as st
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
-SHEET_NAME = "Marketing dashboard data"
-
-EXPECTED_COLS = ["video_id", "title", "channel", "engagement_rate", "date"]
-
+def get_secret(name: str, default=None):
+    val = os.getenv(name)
+    if val not in (None, ""):
+        return val
+    try:
+        return st.secrets[name]
+    except Exception:
+        return default
 
 # =========================================================
 # GOOGLE SHEETS INTEGRATION
@@ -23,7 +27,7 @@ def get_sheet():
         "https://www.googleapis.com/auth/drive",
     ]
 
-    raw_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
+    raw_json = get_secret("GOOGLE_CREDENTIALS_JSON")
     if not raw_json:
         st.error("GOOGLE_CREDENTIALS_JSON secret not found. Add it in your deployment settings.")
         raise RuntimeError("Missing GOOGLE_CREDENTIALS_JSON")

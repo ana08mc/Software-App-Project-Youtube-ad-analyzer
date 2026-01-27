@@ -3,15 +3,12 @@ import re
 import sys
 import time
 import json
-import io
 from collections import Counter
 from datetime import datetime, timezone
 
 import pandas as pd
 import numpy as np
-import requests
 from dateutil import parser as dtparser
-from bs4 import BeautifulSoup
 
 import streamlit as st
 import nltk
@@ -35,13 +32,6 @@ try:
     import pytesseract
 except Exception:
     pytesseract = None
-
-# YouTube API
-from googleapiclient.discovery import build
-
-# Google Sheets
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
 
 # Visualization
 import altair as alt
@@ -94,6 +84,31 @@ from storage.sheets import (
 
 from analysis.thumbnail import analyze_thumbnail
 
+def get_secret(name: str, default=None):
+    # 1) Prefer environment variables (Docker Compose / .env)
+    val = os.getenv(name)
+    if val not in (None, ""):
+        return val
+
+    # 2) Try Streamlit secrets only if available (doesn't crash if missing)
+    try:
+        return st.secrets[name]
+    except Exception:
+        return default
+    
+
+# =========================================================
+# API KEY
+# =========================================================
+api_key = get_secret("YT_API_KEY")
+
+if not api_key:
+    api_key = st.sidebar.text_input("🔑 YouTube API Key", type="password")
+
+if not api_key:
+    st.error("Missing YouTube API key. Set YT_API_KEY in environment variables (Docker/.env) or Streamlit secrets.")
+    st.stop()
+
 
 # =========================================================
 # STREAMLIT CONFIG
@@ -137,19 +152,6 @@ if "comparison_done" not in st.session_state:
 
 
 # =========================================================
-# API KEY
-# =========================================================
-api_key = (
-    st.secrets.get("YT_API_KEY")
-    or os.getenv("YT_API_KEY")
-    or st.sidebar.text_input("🔑 YouTube API Key", type="password")
-)
-
-if not api_key:
-    st.error("Falta la YouTube API Key. Ponla en .streamlit/secrets.toml o como variable de entorno YT_API_KEY.")
-    st.stop()
-
-# =========================================================
 # UI TABS
 # =========================================================
 tab1, tab2 = st.tabs(["🎥 Video Analysis", "📊 Dashboard"])
@@ -184,10 +186,6 @@ with tab1:
     if run:
         st.session_state["analysis_done"] = True
         st.session_state["comparison_done"] = False
-        
-        if not api_key:
-            st.error("⚠️ Please enter your YouTube API key.")
-            st.stop()
 
         vid = extract_video_id(video_url)
         if not vid:
@@ -525,9 +523,6 @@ with tab1:
         st.session_state["comparison_done"] = True
         st.session_state["analysis_done"] = False
         
-        if not api_key:
-            st.error("⚠️ Please enter your YouTube API key.")
-            st.stop()
 
         vid1 = extract_video_id(video_url)
         vid2 = extract_video_id(video_url_2)
