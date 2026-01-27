@@ -26,6 +26,7 @@ RUN mkdir -p /app/data && \
 # Copy requirements and code
 COPY requirements.txt ./
 COPY src/ ./src/
+COPY data/ ./data/
 
 # Install Python dependencies
 RUN pip3 install --upgrade pip
@@ -41,5 +42,5 @@ EXPOSE 8501
 # Healthcheck
 HEALTHCHECK CMD curl --fail http://localhost:8501/_stcore/health
 
-# Run app
-ENTRYPOINT ["streamlit", "run", "src/streamlit_app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+# Run app (UPDATED PATH)
+ENTRYPOINT ["streamlit", "run", "src/app/streamlit_app.py", "--server.port=8501", "--server.address=0.0.0.0"]
