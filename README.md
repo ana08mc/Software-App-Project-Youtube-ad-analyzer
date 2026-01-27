@@ -2,7 +2,7 @@
 
 **M2 Software Project 2025–2026 – Aix-Marseille Université**
 
-Public repository: **https://github.com/martinezcastroanamaria-blip/Marketing-Product---Hugging-Face-App**
+Public repository: **https://github.com/martinezcastroanamaria-blip/Marketing-Product-App**
 
 This Streamlit application analyzes YouTube videos from a marketing and advertising perspective, combining:
 
