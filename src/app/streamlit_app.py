@@ -1,5 +1,6 @@
 import os
 import re
+import sys
 import time
 import json
 import io
@@ -45,6 +46,55 @@ from oauth2client.service_account import ServiceAccountCredentials
 # Visualization
 import altair as alt
 
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+sys.path.insert(0, project_root)
+
+src_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, src_path)
+
+
+from utils.helpers import (
+    extract_video_id,
+    iso8601_to_hms,
+    iso8601_to_seconds,
+    clean_html,
+    days_since
+)
+
+from api.youtube_api import (
+    get_video_details,
+    fetch_comments,
+    get_channel_videos,
+    get_channel_engagement,
+    plot_channel_history
+)
+
+from analysis.video_analysis import (
+    analyze_video_duration_for_ads,
+    analyze_title_for_ads,
+    detect_cta_in_description,
+    analyze_engagement_velocity,
+    calculate_viral_coefficient,
+    analyze_comment_sentiment_detailed,
+    extract_top_keywords,
+    emotion_and_topics_from_comments,
+    channel_tags_history
+)
+
+from analysis.viz import (
+    generate_wordcloud,
+    get_video_preview_thumbnails,
+    plot_top_comment_words
+)
+
+from storage.sheets import (
+    load_portfolio_from_sheet,
+    append_to_sheet
+)
+
+from analysis.thumbnail import analyze_thumbnail
+
+
 # =========================================================
 # STREAMLIT CONFIG
 # =========================================================
@@ -68,65 +118,6 @@ except LookupError:
 sia = SentimentIntensityAnalyzer()
 STOPWORDS = set(stopwords.words("english"))
 
-# =========================================================
-# GOOGLE SHEETS INTEGRATION
-# =========================================================
-SHEET_NAME = "Marketing dashboard data"
-
-def get_sheet():
-    """Get Google Sheet using JSON stored in environment variable."""
-    scope = [
-        "https://spreadsheets.google.com/feeds",
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive.file",
-        "https://www.googleapis.com/auth/drive",
-    ]
-
-    raw_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
-    if not raw_json:
-        st.error("GOOGLE_CREDENTIALS_JSON secret not found. Add it in your deployment settings.")
-        raise RuntimeError("Missing GOOGLE_CREDENTIALS_JSON")
-
-    info = json.loads(raw_json)
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(info, scope)
-    client = gspread.authorize(creds)
-    sheet = client.open(SHEET_NAME).sheet1
-    return sheet
-
-EXPECTED_COLS = ["video_id", "title", "channel", "engagement_rate", "date"]
-
-def load_portfolio_from_sheet():
-    try:
-        sheet = get_sheet()
-        values = sheet.get_all_values()
-
-        if not values:
-            return []
-
-        header = values[0]
-
-        if set(EXPECTED_COLS).issubset(set(header)):
-            rows = sheet.get_all_records()
-            return rows
-
-        fixed = []
-        for row in values:
-            fixed_row = row + [""] * (len(EXPECTED_COLS) - len(row))
-            fixed.append(dict(zip(EXPECTED_COLS, fixed_row[:len(EXPECTED_COLS)])))
-        return fixed
-
-    except Exception as e:
-        st.warning(f"⚠️ Could not load data from Google Sheets: {e}")
-        return []
-
-def append_to_sheet(row_dict: dict):
-    try:
-        sheet = get_sheet()
-        cols = ["video_id", "title", "channel", "engagement_rate", "date"]
-        row = [row_dict.get(c, "") for c in cols]
-        sheet.append_row(row)
-    except Exception as e:
-        st.error(f"❌ Could not save to Google Sheets: {e}")
 
 # =========================================================
 # SESSION STATE
@@ -144,475 +135,19 @@ if "analysis_done" not in st.session_state:
 if "comparison_done" not in st.session_state:
     st.session_state["comparison_done"] = False
 
-# =========================================================
-# HELPER FUNCTIONS
-# =========================================================
-def extract_video_id(url_or_id):
-    """Extract video ID from YouTube URL or return ID if already valid."""
-    if re.match(r"^[\w-]{11}$", url_or_id):
-        return url_or_id
-    m = re.search(r"v=([\w-]{11})", url_or_id) or re.search(r"youtu\.be/([\w-]{11})", url_or_id)
-    return m.group(1) if m else ""
-
-def iso8601_to_hms(iso):
-    """Convert ISO 8601 duration to HH:MM:SS format."""
-    h = re.search(r"(\d+)H", iso or "")
-    m = re.search(r"(\d+)M", iso or "")
-    s = re.search(r"(\d+)S", iso or "")
-    hh, mm, ss = int(h.group(1)) if h else 0, int(m.group(1)) if m else 0, int(s.group(1)) if s else 0
-    return f"{hh:02d}:{mm:02d}:{ss:02d}"
-
-def iso8601_to_seconds(iso):
-    """Convert ISO 8601 duration to seconds."""
-    h = re.search(r"(\d+)H", iso or "")
-    m = re.search(r"(\d+)M", iso or "")
-    s = re.search(r"(\d+)S", iso or "")
-    hh, mm, ss = int(h.group(1)) if h else 0, int(m.group(1)) if m else 0, int(s.group(1)) if s else 0
-    return hh * 3600 + mm * 60 + ss
-
-def clean_html(t):
-    """Remove HTML tags from text."""
-    return BeautifulSoup(t or "", "html.parser").get_text(" ", strip=True)
-
-def days_since(iso_date):
-    """Calculate days since a given ISO date."""
-    try:
-        dt = dtparser.isoparse(iso_date).astimezone(timezone.utc)
-        return max((datetime.now(timezone.utc) - dt).days, 1)
-    except Exception:
-        return np.nan
 
 # =========================================================
-# YOUTUBE API FUNCTIONS
+# API KEY
 # =========================================================
-def get_video_details(api_key, vid):
-    """Fetch video details from YouTube API."""
-    yt = build("youtube", "v3", developerKey=api_key)
-    r = yt.videos().list(part="snippet,statistics,contentDetails", id=vid).execute()
-    if not r.get("items"):
-        return None
-    it = r["items"][0]
-    sn, stt, cd = it.get("snippet", {}), it.get("statistics", {}), it.get("contentDetails", {})
-    return {
-        "video_id": it["id"],
-        "title": sn.get("title", ""),
-        "channel_title": sn.get("channelTitle", ""),
-        "channel_id": sn.get("channelId", ""),
-        "published_at": sn.get("publishedAt", ""),
-        "description": sn.get("description", ""),
-        "tags": sn.get("tags", []),
-        "thumbnail": sn.get("thumbnails", {}).get("high", {}).get("url"),
-        "views": int(stt.get("viewCount", 0)),
-        "likes": int(stt.get("likeCount", 0)),
-        "comments_count": int(stt.get("commentCount", 0)),
-        "duration_iso": cd.get("duration", ""),
-    }
+api_key = (
+    st.secrets.get("YT_API_KEY")
+    or os.getenv("YT_API_KEY")
+    or st.sidebar.text_input("🔑 YouTube API Key", type="password")
+)
 
-def fetch_comments(api_key, vid, cap):
-    """Fetch comments from a video."""
-    if cap == 0:
-        return pd.DataFrame(columns=["comment_text", "like_count", "published_at"])
-    yt = build("youtube", "v3", developerKey=api_key)
-    out, got, page = [], 0, None
-    while got < cap:
-        try:
-            r = yt.commentThreads().list(
-                part="snippet",
-                videoId=vid,
-                maxResults=min(100, cap - got),
-                pageToken=page,
-                order="relevance",
-                textFormat="html"
-            ).execute()
-        except Exception:
-            break
-        for it in r.get("items", []):
-            top = it["snippet"]["topLevelComment"]["snippet"]
-            out.append({
-                "comment_text": clean_html(top.get("textDisplay", "")),
-                "like_count": top.get("likeCount", 0),
-                "published_at": top.get("publishedAt", "")
-            })
-        got += len(r.get("items", []))
-        page = r.get("nextPageToken")
-        if not page:
-            break
-        time.sleep(0.1)
-    return pd.DataFrame(out)
-
-def get_channel_videos(api_key, channel_id, max_results=30):
-    """Get list of video IDs from a channel."""
-    yt = build("youtube", "v3", developerKey=api_key)
-    videos = []
-    next_page = None
-    while len(videos) < max_results:
-        request = yt.search().list(
-            part="snippet",
-            channelId=channel_id,
-            maxResults=50,
-            pageToken=next_page,
-            type="video"
-        )
-        response = request.execute()
-        for item in response.get("items", []):
-            videos.append(item["id"]["videoId"])
-        next_page = response.get("nextPageToken")
-        if not next_page:
-            break
-        time.sleep(0.3)
-    return videos
-
-def get_channel_engagement(api_key, channel_id, max_results=30):
-    """Calculate average engagement rate for a channel."""
-    videos = get_channel_videos(api_key, channel_id, max_results)
-    rates = []
-    for vid in videos:
-        v = get_video_details(api_key, vid)
-        if v:
-            rate = (v["likes"] + v["comments_count"]) / max(v["views"], 1)
-            rates.append(rate)
-    return np.mean(rates) if rates else np.nan
-
-# =========================================================
-# ADVERTISING-SPECIFIC FUNCTIONS
-# =========================================================
-def analyze_video_duration_for_ads(duration_seconds):
-    """Analyze if video duration is optimal for advertising."""
-    if duration_seconds < 6:
-        return "⚡ Bumper Ad (6s) - Ideal for quick brand awareness", "success"
-    elif duration_seconds <= 15:
-        return "✅ Short format - Perfect for skippable ads", "success"
-    elif duration_seconds <= 30:
-        return "👍 Good duration - Optimal for TrueView ads", "success"
-    elif duration_seconds <= 60:
-        return "⚠️ Medium duration - May lose audience after 30s", "warning"
-    else:
-        minutes = duration_seconds // 60
-        return f"❌ Too long ({minutes}min+) - High abandonment risk for ads", "error"
-
-def analyze_title_for_ads(title):
-    """Analyze title effectiveness for advertising."""
-    score = 0
-    recommendations = []
-    
-    if 40 <= len(title) <= 70:
-        score += 25
-        recommendations.append("✅ Optimal length (40-70 characters)")
-    elif len(title) < 40:
-        score += 10
-        recommendations.append("⚠️ Short title - consider adding more context")
-    else:
-        recommendations.append("❌ Title too long - may be cut off on mobile")
-    
-    if re.search(r'\d+', title):
-        score += 20
-        recommendations.append("✅ Contains numbers (increases CTR)")
-    else:
-        recommendations.append("💡 Consider adding numbers for impact")
-    
-    power_words = ['free', 'new', 'best', 'top', 'how', 'why', 'ultimate', 'guide', 'tips']
-    if any(word in title.lower() for word in power_words):
-        score += 25
-        recommendations.append("✅ Contains power words")
-    else:
-        recommendations.append("💡 Add action keywords")
-    
-    if title[0].isupper():
-        score += 15
-        recommendations.append("✅ First letter capitalized")
-    
-    if any(p in title for p in ['!', '?', ':', '|']):
-        score += 15
-        recommendations.append("✅ Uses effective punctuation")
-    else:
-        recommendations.append("💡 Consider punctuation for emphasis")
-    
-    return score, recommendations
-
-def detect_cta_in_description(description):
-    """Detect call-to-action elements in description."""
-    cta_patterns = [
-        r'(click|tap|visit|check out|learn more|subscribe|buy|shop|get|download)',
-        r'(link in.*description|link below|in.*bio)',
-        r'(www\.|https?://)',
-    ]
-    
-    ctas_found = []
-    for pattern in cta_patterns:
-        matches = re.findall(pattern, description.lower())
-        if matches:
-            ctas_found.extend(matches)
-    
-    return len(set(ctas_found))
-
-def analyze_engagement_velocity(views, likes, comments, days_old):
-    """Analyze engagement velocity (daily metrics)."""
-    if days_old == 0:
-        days_old = 1
-    
-    views_per_day = views / days_old
-    likes_per_day = likes / days_old
-    comments_per_day = comments / days_old
-    
-    return {
-        "views_per_day": views_per_day,
-        "likes_per_day": likes_per_day,
-        "comments_per_day": comments_per_day,
-        "engagement_per_day": (likes + comments) / days_old
-    }
-
-def calculate_viral_coefficient(views, likes, comments, channel_avg_engagement):
-    """Calculate virality coefficient compared to channel average."""
-    video_engagement = (likes + comments) / max(views, 1)
-    
-    if channel_avg_engagement > 0:
-        viral_score = (video_engagement / channel_avg_engagement) * 100
-        
-        if viral_score >= 150:
-            return viral_score, "🚀 VIRAL - Exceeds channel average by 150%+", "success"
-        elif viral_score >= 100:
-            return viral_score, "📈 Excellent - Above average performance", "success"
-        elif viral_score >= 75:
-            return viral_score, "👍 Good - Near average performance", "info"
-        else:
-            return viral_score, "⚠️ Below average performance", "warning"
-    
-    return None, "⚠️ No channel data for comparison", "info"
-
-def analyze_comment_sentiment_detailed(comments_df):
-    """Detailed sentiment analysis of comments."""
-    if comments_df.empty:
-        return None
-    
-    comments_df["sentiment"] = comments_df["comment_text"].apply(
-        lambda t: sia.polarity_scores(str(t))["compound"]
-    )
-    
-    positive = len(comments_df[comments_df["sentiment"] > 0.05])
-    neutral = len(comments_df[(comments_df["sentiment"] >= -0.05) & (comments_df["sentiment"] <= 0.05)])
-    negative = len(comments_df[comments_df["sentiment"] < -0.05])
-    
-    total = len(comments_df)
-    
-    return {
-        "positive_pct": (positive / total) * 100 if total > 0 else 0,
-        "neutral_pct": (neutral / total) * 100 if total > 0 else 0,
-        "negative_pct": (negative / total) * 100 if total > 0 else 0,
-        "avg_sentiment": comments_df["sentiment"].mean(),
-        "positive": positive,
-        "neutral": neutral,
-        "negative": negative,
-        "total": total
-    }
-
-def extract_top_keywords(title, tags, description):
-    """Extract top keywords from video content."""
-    text = f"{title} {' '.join(tags)} {description[:200]}"
-    text = re.sub(r'[^\w\s]', ' ', text.lower())
-    
-    vectorizer = CountVectorizer(stop_words="english", max_features=15, ngram_range=(1, 2))
-    try:
-        X = vectorizer.fit_transform([text])
-        keywords = vectorizer.get_feature_names_out()
-        return list(keywords)
-    except:
-        return []
-
-# =========================================================
-# VISUALIZATION FUNCTIONS
-# =========================================================
-def generate_wordcloud(text):
-    """Generate word cloud from text."""
-    wordcloud = WordCloud(width=800, height=400, background_color="white").generate(text)
-    return wordcloud.to_array()
-
-def get_video_preview_thumbnails(video_id):
-    """Get YouTube auto-generated thumbnails."""
-    return {
-        "beginning": f"https://img.youtube.com/vi/{video_id}/1.jpg",
-        "middle": f"https://img.youtube.com/vi/{video_id}/2.jpg",
-        "end": f"https://img.youtube.com/vi/{video_id}/3.jpg"
-    }
-
-def plot_top_comment_words(comments_df, n=15):
-    """Plot top words from comments."""
-    words = " ".join(comments_df["comment_text"].astype(str)).lower().split()
-    words = [w for w in words if w.isalpha() and w not in STOPWORDS and len(w) > 2]
-    top = Counter(words).most_common(n)
-    if not top:
-        st.info("Not enough relevant words to display.")
-        return
-    df = pd.DataFrame(top, columns=["word", "count"])
-    st.bar_chart(df.set_index("word"))
-
-def plot_channel_history(api_key, channel_id, n=15):
-    """Plot channel engagement history."""
-    videos = get_channel_videos(api_key, channel_id, max_results=n)
-    data = []
-    for vid in videos:
-        v = get_video_details(api_key, vid)
-        if v:
-            v["engagement_rate"] = (v["likes"] + v["comments_count"]) / max(v["views"], 1)
-            data.append(v)
-    if data:
-        df = pd.DataFrame(data).sort_values("published_at")
-        st.line_chart(df.set_index("published_at")["engagement_rate"])
-    else:
-        st.info("No data available for channel history.")
-
-# =========================================================
-# THUMBNAIL ANALYZER (ADVANCED)
-# =========================================================
-def _rgb_to_hex(rgb):
-    """Convert RGB tuple to hex color."""
-    try:
-        return '#{:02x}{:02x}{:02x}'.format(*rgb)
-    except Exception:
-        return None
-
-def analyze_thumbnail(url):
-    """Comprehensive thumbnail analysis."""
-    out = {
-        "ok": False,
-        "error": None,
-        "brightness": None,
-        "contrast": None,
-        "dominant_color_rgb": None,
-        "dominant_color_hex": None,
-        "ocr_text": None,
-        "face_count": None,
-        "size": None,
-    }
-    try:
-        r = requests.get(url, timeout=8)
-        r.raise_for_status()
-        if Image is None:
-            out["error"] = "Pillow (PIL) not installed"
-            return out
-        img = Image.open(io.BytesIO(r.content)).convert("RGB")
-        out["size"] = img.size
-
-        gray = img.convert("L")
-        stat = ImageStat.Stat(gray)
-        brightness = stat.mean[0]
-        contrast = stat.stddev[0]
-        out["brightness"] = float(brightness)
-        out["contrast"] = float(contrast)
-
-        arr = np.array(img).reshape(-1, 3)
-        arr_bucket = (arr // 32) * 32
-        tuples = [tuple(int(x) for x in row) for row in arr_bucket]
-        if tuples:
-            dom_rgb = Counter(tuples).most_common(1)[0][0]
-            out["dominant_color_rgb"] = dom_rgb
-            out["dominant_color_hex"] = _rgb_to_hex(dom_rgb)
-
-        if pytesseract is not None:
-            try:
-                t_cmd = os.getenv("TESSERACT_CMD")
-                if t_cmd:
-                    pytesseract.pytesseract.tesseract_cmd = t_cmd
-                ocr_text = pytesseract.image_to_string(img)
-                out["ocr_text"] = ocr_text.strip() if ocr_text and ocr_text.strip() else None
-            except Exception as e:
-                out["ocr_text"] = f"OCR error: {e}"
-
-        if cv2 is not None:
-            try:
-                np_img = np.array(img)[:, :, ::-1].copy()
-                gray_cv = cv2.cvtColor(np_img, cv2.COLOR_BGR2GRAY)
-                cascade_path = None
-                if hasattr(cv2.data, "haarcascades"):
-                    candidate = os.path.join(cv2.data.haarcascades, "haarcascade_frontalface_default.xml")
-                    if os.path.exists(candidate):
-                        cascade_path = candidate
-                if cascade_path:
-                    face_cascade = cv2.CascadeClassifier(cascade_path)
-                    faces = face_cascade.detectMultiScale(gray_cv, scaleFactor=1.1, minNeighbors=4, minSize=(30, 30))
-                    out["face_count"] = int(len(faces))
-                else:
-                    out["face_count"] = None
-            except Exception as e:
-                out["face_count"] = f"Face detect error: {e}"
-
-        out["ok"] = True
-        return out
-    except Exception as e:
-        out["error"] = str(e)
-        return out
-
-# =========================================================
-# EMOTION MAP & TOPIC MODELING
-# =========================================================
-def emotion_and_topics_from_comments(comments_df, n_topics=3, max_features=5000):
-    """Advanced comment analysis."""
-    res = {
-        "sentiment_counts": None,
-        "avg_sentiment": None,
-        "repr_comments": {},
-        "topics": [],
-    }
-    if comments_df is None or comments_df.empty:
-        return res
-
-    comments_df = comments_df.copy()
-    comments_df["sentiment"] = comments_df["comment_text"].apply(
-        lambda t: sia.polarity_scores(str(t))["compound"]
-    )
-    comments_df["sent_bucket"] = comments_df["sentiment"].apply(
-        lambda s: "positive" if s > 0.2 else ("negative" if s < -0.2 else "neutral")
-    )
-
-    res["sentiment_counts"] = comments_df["sent_bucket"].value_counts().to_dict()
-    res["avg_sentiment"] = float(comments_df["sentiment"].mean())
-
-    for b in ["positive", "neutral", "negative"]:
-        dfb = comments_df[comments_df["sent_bucket"] == b]
-        if not dfb.empty:
-            dfb_sorted = dfb.sort_values("like_count", ascending=False)
-            res["repr_comments"][b] = dfb_sorted["comment_text"].head(5).tolist()
-        else:
-            res["repr_comments"][b] = []
-
-    texts = comments_df["comment_text"].astype(str).tolist()
-    if len(texts) >= 10:
-        try:
-            cv = CountVectorizer(stop_words="english", max_features=max_features)
-            X = cv.fit_transform(texts)
-            lda = LDA(n_components=min(n_topics, 6), random_state=0, learning_method="batch")
-            lda.fit(X)
-            words = cv.get_feature_names_out()
-            topics = []
-            for i, comp in enumerate(lda.components_):
-                terms = [words[idx] for idx in comp.argsort()[-8:][::-1]]
-                topics.append({"topic_id": i, "top_words": terms})
-            res["topics"] = topics
-        except Exception:
-            res["topics"] = []
-    else:
-        res["topics"] = []
-
-    return res
-
-# =========================================================
-# CHANNEL TAG HISTORY & LENGTH VS ENGAGEMENT
-# =========================================================
-def channel_tags_history(api_key, channel_id, max_videos=50):
-    """Analyze channel tag usage and collect video data."""
-    vids = get_channel_videos(api_key, channel_id, max_results=max_videos)
-    tags_counter = Counter()
-    data = []
-    for vid in vids:
-        v = get_video_details(api_key, vid)
-        if v:
-            data.append(v)
-            tags_counter.update([t.lower() for t in v.get("tags", []) if isinstance(t, str)])
-    return tags_counter, pd.DataFrame(data)
-
-# =========================================================
-# SIDEBAR
-# =========================================================
-api_key = os.getenv("YT_API_KEY") or st.sidebar.text_input("🔑 YouTube API Key", type="password")
+if not api_key:
+    st.error("Falta la YouTube API Key. Ponla en .streamlit/secrets.toml o como variable de entorno YT_API_KEY.")
+    st.stop()
 
 # =========================================================
 # UI TABS
