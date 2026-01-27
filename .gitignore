@@ -1,7 +1,51 @@
-streamlit_app.json
-*.pyc
+# Python
 __pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
 venv/
-.env/
+env/
+ENV/
+
+# Environment variables / secrets
+.env
+.env.*
+.streamlit/secrets.toml
+*.key
+*.pem
+credentials.json
+google_sheet.json
+*.json
+
+# Streamlit
+streamlit_app.json
+
+# IDE
+.vscode/
+.idea/
+
+# OS
 .DS_Store
 Thumbs.db
+Desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Tests / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data (keep structure, ignore heavy outputs)
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
