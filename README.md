@@ -2,13 +2,13 @@
 
 **M2 Software Project 2025–2026 – Aix-Marseille Université**
 
-This Streamlit web application analyzes YouTube videos from a marketing and advertising perspective, combining:
+This Streamlit application analyzes YouTube videos from a marketing and advertising perspective, combining:
 
 - YouTube Data API
 - Natural Language Processing (sentiment analysis, topic modeling)
 - Computer Vision (OCR, face detection, color & brightness analysis)
 - Google Sheets as persistent storage
-- A professional modular Python architecture
+- A modular Python architecture
 - Dockerized deployment
 
 ---
@@ -42,7 +42,7 @@ src/
  │    └── youtube_api.py        # Communication with YouTube API
  ├── analysis/
  │    ├── video_analysis.py     # Marketing logic, NLP, analytics
- │    ├── viz.py                # Visualizations
+ │    ┛── viz.py                # Visualizations
  │    └── thumbnail.py          # OCR and image analysis
  ├── storage/
  │    └── sheets.py             # Google Sheets integration
@@ -54,9 +54,9 @@ src/
 
 This separation ensures:
 
-- Clear separation between UI, API logic, analysis, and storage
+- Clear distinction between UI, API logic, analysis, and storage
 - Easier testing and maintenance
-- Professional Python project organization
+- Python project organization
 
 ---
 
@@ -69,7 +69,7 @@ The app requires two separate credentials:
 | YouTube Data API | `YT_API_KEY` | Retrieve video and channel data |
 | Google Sheets | `GOOGLE_CREDENTIALS_JSON` | Store and load analysis results |
 
-The repository includes a `.env.example` file.
+The repository includes a `.env.example` template.
 
 To run the project, copy it:
 
@@ -77,7 +77,7 @@ To run the project, copy it:
 cp .env.example .env
 ```
 
-and fill in your own credentials.
+Then fill in your own credentials.
 
 ---
 
@@ -106,7 +106,7 @@ YT_API_KEY=YOUR_YOUTUBE_API_KEY
 GOOGLE_CREDENTIALS_JSON=PASTE_JSON_HERE
 ```
 
-⚠️ Never upload this JSON file to GitHub.
+Never upload this JSON file to GitHub.
 
 ---
 
@@ -119,7 +119,7 @@ pip install -r requirements.txt
 streamlit run src/app/streamlit_app.py
 ```
 
-The app will be available at:  
+Open in your browser:  
 http://localhost:8501
 
 ---
@@ -154,7 +154,7 @@ All required Python packages are listed in `requirements.txt`.
 
 ## Academic Information
 
-**Course:** M2 Software Project 2025-2026  
+**Course:** M2 Software Project 2025–2026  
 **University:** Aix-Marseille Université  
 **Professor:** Virgile Pesce
 
@@ -163,3 +163,4 @@ All required Python packages are listed in `requirements.txt`.
 ## License
 
 MIT License
+
