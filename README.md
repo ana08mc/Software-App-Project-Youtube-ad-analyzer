@@ -2,7 +2,7 @@
 
 **M2 Software Project 2025–2026 – Aix-Marseille Université**
 
-Public repository: **https://github.com/ana08mc/Marketing-Product-App**
+Public repository: **https://github.com/ana08mc/Software-App-Project-Youtube-ad-analyzer**
 
 This Streamlit application analyzes YouTube videos from a marketing and advertising perspective, combining:
 
