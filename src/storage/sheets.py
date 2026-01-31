@@ -4,43 +4,64 @@ import streamlit as st
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
-def get_secret(name: str, default=None):
-    val = os.getenv(name)
-    if val not in (None, ""):
-        return val
-    try:
-        return st.secrets[name]
-    except Exception:
-        return default
+SHEET_NAME = os.getenv("SHEET_NAME", "Marketing dashboard data")
+EXPECTED_COLS = ["video_id", "title", "channel", "engagement_rate", "date"]
 
-# =========================================================
-# GOOGLE SHEETS INTEGRATION
-# =========================================================
-SHEET_NAME = "Marketing dashboard data"
+def _sanitize_json_env(raw: str) -> str:
+    """
+    Makes GOOGLE_CREDENTIALS_JSON more tolerant to:
+    - surrounding quotes (single/double)
+    - Windows CRLF
+    - private_key with escaped \\n instead of real newlines
+    """
+    if raw is None:
+        return ""
+
+    raw = raw.strip()
+
+    # Remove surrounding quotes if present
+    if (raw.startswith("'") and raw.endswith("'")) or (raw.startswith('"') and raw.endswith('"')):
+        raw = raw[1:-1].strip()
+
+    # Normalize CRLF
+    raw = raw.replace("\r\n", "\n").replace("\r", "\n")
+
+    return raw
 
 def get_sheet():
-    """Get Google Sheet using JSON stored in environment variable."""
+    """
+    Returns a gspread worksheet (sheet1).
+    If creds are missing/invalid, raises an Exception which the callers catch gracefully.
+    """
     scope = [
-        "https://spreadsheets.google.com/feeds",
         "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive.file",
         "https://www.googleapis.com/auth/drive",
     ]
 
-    raw_json = get_secret("GOOGLE_CREDENTIALS_JSON")
+    raw_json = os.getenv("GOOGLE_CREDENTIALS_JSON", "")
+    raw_json = _sanitize_json_env(raw_json)
+
     if not raw_json:
-        st.error("GOOGLE_CREDENTIALS_JSON secret not found. Add it in your deployment settings.")
         raise RuntimeError("Missing GOOGLE_CREDENTIALS_JSON")
 
+    # Parse JSON
     info = json.loads(raw_json)
+
+    # Fix private_key newlines if they were escaped
+    if "private_key" in info and isinstance(info["private_key"], str):
+        info["private_key"] = info["private_key"].replace("\\n", "\n")
+
     creds = ServiceAccountCredentials.from_json_keyfile_dict(info, scope)
     client = gspread.authorize(creds)
-    sheet = client.open(SHEET_NAME).sheet1
-    return sheet
 
-EXPECTED_COLS = ["video_id", "title", "channel", "engagement_rate", "date"]
+    # Open workbook + first sheet
+    return client.open(SHEET_NAME).sheet1
 
 def load_portfolio_from_sheet():
+    """
+    Loads rows from Sheets if possible.
+    If not possible, returns [] WITHOUT breaking the app.
+    """
     try:
         sheet = get_sheet()
         values = sheet.get_all_values()
@@ -51,24 +72,27 @@ def load_portfolio_from_sheet():
         header = values[0]
 
         if set(EXPECTED_COLS).issubset(set(header)):
-            rows = sheet.get_all_records()
-            return rows
+            return sheet.get_all_records()
 
+        # fallback: coerce into expected columns
         fixed = []
-        for row in values:
+        for row in values[1:]:
             fixed_row = row + [""] * (len(EXPECTED_COLS) - len(row))
             fixed.append(dict(zip(EXPECTED_COLS, fixed_row[:len(EXPECTED_COLS)])))
         return fixed
 
     except Exception as e:
-        st.warning(f" Could not load data from Google Sheets: {e}")
+        # Important: don't scare the user if Sheets isn't configured
+        # Show a small info instead of a big yellow warning
+        st.info("Google Sheets not configured (optional). Dashboard will work locally.")
         return []
 
 def append_to_sheet(row_dict: dict):
-    try:
-        sheet = get_sheet()
-        cols = ["video_id", "title", "channel", "engagement_rate", "date"]
-        row = [row_dict.get(c, "") for c in cols]
-        sheet.append_row(row)
-    except Exception as e:
-        st.error(f"Could not save to Google Sheets: {e}")
+    """
+    Appends a single row to Sheets if configured.
+    If not configured, raises Exception to be caught by the caller.
+    """
+    sheet = get_sheet()
+    cols = EXPECTED_COLS
+    row = [row_dict.get(c, "") for c in cols]
+    sheet.append_row(row)
