@@ -105,9 +105,6 @@ api_key = get_secret("YT_API_KEY")
 if not api_key:
     api_key = st.sidebar.text_input("🔑 YouTube API Key", type="password")
 
-if not api_key:
-    st.error("Missing YouTube API key. Set YT_API_KEY in environment variables (Docker/.env) or Streamlit secrets.")
-    st.stop()
 
 
 # =========================================================
@@ -731,4 +728,6 @@ with tab2:
         )
     else:
         st.info("📭 No saved analyses yet. Go to 'Video Analysis', run an analysis, and click 'Save Analysis to Dashboard'.")
+
+
 
